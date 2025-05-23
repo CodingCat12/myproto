@@ -1,1 +1,0 @@
-std::result::Result<std::boxed::Box<(dyn erased_serde::Serialize + std::marker::Send + std::marker::Sync + 'static)>, anyhow::Error>
