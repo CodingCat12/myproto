@@ -1,8 +1,7 @@
-use anyhow::{Error, Result};
+use anyhow::Result;
 use rustls::pki_types::CertificateDer;
 use rustls::pki_types::PrivateKeyDer;
 use rustls::pki_types::pem::PemObject;
-use serde::ser::SerializeMap;
 use tokio::net::TcpListener;
 
 use futures::{SinkExt, StreamExt};
@@ -90,10 +89,7 @@ where
 
         tracing::debug!("Processing message");
 
-        let resp = match handle_msg(&bytes).await {
-            Ok(s) => Response::Success(s),
-            Err(err) => Response::Error(err),
-        };
+        let resp = handle_msg(&bytes).await?;
 
         let resp_str = serde_json::to_string(&resp)?;
         framed.send(resp_str + delim).await?;
@@ -104,66 +100,38 @@ where
     Ok(())
 }
 
-pub enum Response {
-    Success(Box<dyn erased_serde::Serialize + Send + Sync>),
-    Error(Error),
-}
-
-impl Serialize for Response {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        let mut map = serializer.serialize_map(Some(2))?;
-
-        match self {
-            Response::Success(data) => {
-                map.serialize_entry("type", "Success")?;
-                map.serialize_entry("value", &Erased(data))?;
-            }
-            Response::Error(e) => {
-                map.serialize_entry("type", "Error")?;
-                map.serialize_entry("message", &e.to_string())?;
-            }
-        }
-
-        map.end()
-    }
-}
-struct Erased<'a>(&'a dyn erased_serde::Serialize);
-
-impl<'a> Serialize for Erased<'a> {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        erased_serde::serialize(self.0, serializer)
-    }
-}
-
-async fn handle_msg(input: &[u8]) -> Result<Box<dyn erased_serde::Serialize + Send + Sync>> {
+async fn handle_msg(input: &[u8]) -> Result<Box<dyn Response>> {
     let req: Box<dyn Request> = serde_json::from_slice(input)?;
     req.handle().await
 }
 
-use serde::{Deserialize, Serialize, Serializer};
+use serde::{Deserialize, Serialize};
 
 #[typetag::serde(tag = "type")]
 #[async_trait::async_trait]
 pub trait Request: Send + Sync {
-    async fn handle(&self) -> Result<Box<dyn erased_serde::Serialize + Send + Sync>>;
+    async fn handle(&self) -> Result<Box<dyn Response>>;
 }
+
+#[typetag::serde(tag = "type")]
+pub trait Response: erased_serde::Serialize + Send + Sync {}
 
 #[derive(Serialize, Deserialize)]
 pub struct Ping;
 
+#[derive(Serialize, Deserialize)]
+pub struct PingResponse(String);
+
+#[typetag::serde]
+impl Response for PingResponse {}
+
 #[typetag::serde]
 #[async_trait::async_trait]
 impl Request for Ping {
-    async fn handle(&self) -> Result<Box<dyn erased_serde::Serialize + Send + Sync>> {
-        Ok(Box::new(
+    async fn handle(&self) -> Result<Box<dyn Response>> {
+        Ok(Box::new(PingResponse(
             "Thou shalt not to use HTTP;\nThou shalt write thoust own protocol".to_string(),
-        ))
+        )))
     }
 }
 
@@ -172,11 +140,17 @@ pub struct Echo {
     pub message: String,
 }
 
+#[derive(Serialize, Deserialize)]
+pub struct EchoResponse(String);
+
+#[typetag::serde]
+impl Response for EchoResponse {}
+
 #[typetag::serde]
 #[async_trait::async_trait]
 impl Request for Echo {
-    async fn handle(&self) -> Result<Box<dyn erased_serde::Serialize + Send + Sync>> {
-        Ok(Box::new(self.message.clone()))
+    async fn handle(&self) -> Result<Box<dyn Response>> {
+        Ok(Box::new(EchoResponse(self.message.clone())))
     }
 }
 
@@ -186,10 +160,20 @@ pub struct Add {
     pub b: i32,
 }
 
+#[derive(Serialize, Deserialize)]
+pub struct AddResponse {
+    sum: i32,
+}
+
+#[typetag::serde]
+impl Response for AddResponse {}
+
 #[typetag::serde]
 #[async_trait::async_trait]
 impl Request for Add {
-    async fn handle(&self) -> Result<Box<dyn erased_serde::Serialize + Send + Sync>> {
-        Ok(Box::new(self.a + self.b))
+    async fn handle(&self) -> Result<Box<dyn Response>> {
+        Ok(Box::new(AddResponse {
+            sum: self.a + self.b,
+        }))
     }
 }
