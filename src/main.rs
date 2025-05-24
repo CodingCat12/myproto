@@ -124,7 +124,7 @@ pub trait Request: Send + Sync {
 }
 
 #[typetag::serde(tag = "type")]
-pub trait Response: erased_serde::Serialize + Send + Sync {}
+pub trait Response: Send + Sync {}
 
 #[derive(Serialize, Deserialize)]
 pub struct Ping;
