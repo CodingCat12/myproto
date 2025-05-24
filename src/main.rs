@@ -12,6 +12,8 @@ use tokio_rustls::TlsAcceptor;
 use tokio_util::codec::AnyDelimiterCodec;
 use tokio_util::codec::Framed;
 
+use tokio::signal;
+
 #[tokio::main]
 async fn main() -> Result<()> {
     tracing_subscriber::fmt()
@@ -23,24 +25,36 @@ async fn main() -> Result<()> {
     tracing::info!("Listening with TLS on 127.0.0.1:8443");
 
     loop {
-        let (stream, addr) = listener.accept().await?;
-        let acceptor = tls_acceptor.clone();
+        tokio::select! {
+            Ok((stream, addr)) = listener.accept() => {
+                let acceptor = tls_acceptor.clone();
 
-        tracing::info!(%addr, "Client connected");
+                tracing::info!(%addr, "Client connected");
 
-        tokio::spawn(async move {
-            match acceptor.accept(stream).await {
-                Ok(tls_stream) => {
-                    if let Err(e) = handle_client(tls_stream).await {
-                        tracing::error!(%addr, error = %e, "Error handling client");
+                tokio::spawn(async move {
+                    match acceptor.accept(stream).await {
+                        Ok(tls_stream) => {
+                            if let Err(e) = handle_client(tls_stream).await {
+                                tracing::error!(%addr, error = %e, "Error handling client");
+                            }
+                        }
+                        Err(e) => {
+                            tracing::error!(%addr, error = %e, "TLS handshake failed");
+                        }
                     }
-                }
-                Err(e) => {
-                    tracing::error!(%addr, error = %e, "TLS handshake failed");
-                }
+                });
             }
-        });
+
+            _ = signal::ctrl_c() => {
+                tracing::info!("Shutting down");
+                break;
+            }
+        }
     }
+
+    tracing::info!("Shut down succesfully");
+
+    Ok(())
 }
 
 use std::sync::Arc;
