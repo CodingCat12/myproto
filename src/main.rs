@@ -79,7 +79,7 @@ where
             Err(err) => Response::Error(err),
         };
 
-        let resp_str = serde_json::to_string_pretty(&resp)?;
+        let resp_str = serde_json::to_string(&resp)?;
         framed.send(resp_str + delim).await?;
     }
 
