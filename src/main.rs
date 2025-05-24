@@ -45,10 +45,8 @@ async fn main() -> Result<()> {
 use std::sync::Arc;
 
 fn load_tls_config() -> anyhow::Result<TlsAcceptor> {
-    let certs = CertificateDer::pem_file_iter("cert.pem")
-        .unwrap()
-        .map(|cert| cert.unwrap())
-        .collect();
+    let certs: Vec<_> =
+        CertificateDer::pem_file_iter("cert.pem")?.collect::<Result<Vec<_>, _>>()?;
 
     let private_key = PrivateKeyDer::from_pem_file("key.pem").unwrap();
 
