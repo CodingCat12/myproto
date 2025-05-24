@@ -70,7 +70,7 @@ where
 
         tracing::debug!("Processing message");
 
-        let resp = match handle_msg(line.as_bytes()) {
+        let resp = match handle_msg(line.as_bytes()).await {
             Ok(s) => Response::Success(s),
             Err(err) => Response::Error(err),
         };
@@ -119,24 +119,26 @@ impl<'a> Serialize for Erased<'a> {
     }
 }
 
-fn handle_msg(input: &[u8]) -> Result<Box<dyn erased_serde::Serialize + Send + Sync>> {
+async fn handle_msg(input: &[u8]) -> Result<Box<dyn erased_serde::Serialize + Send + Sync>> {
     let req: Box<dyn Request> = serde_json::from_slice(input)?;
-    req.handle()
+    req.handle().await
 }
 
 use serde::{Deserialize, Serialize, Serializer};
 
 #[typetag::serde(tag = "type")]
-pub trait Request {
-    fn handle(&self) -> Result<Box<dyn erased_serde::Serialize + Send + Sync>>;
+#[async_trait::async_trait]
+pub trait Request: Send + Sync {
+    async fn handle(&self) -> Result<Box<dyn erased_serde::Serialize + Send + Sync>>;
 }
 
 #[derive(Serialize, Deserialize)]
 pub struct Ping;
 
 #[typetag::serde]
+#[async_trait::async_trait]
 impl Request for Ping {
-    fn handle(&self) -> Result<Box<dyn erased_serde::Serialize + Send + Sync>> {
+    async fn handle(&self) -> Result<Box<dyn erased_serde::Serialize + Send + Sync>> {
         Ok(Box::new(
             "Thou shalt not to use HTTP;\nThou shalt write thoust own protocol".to_string(),
         ))
@@ -149,8 +151,9 @@ pub struct Echo {
 }
 
 #[typetag::serde]
+#[async_trait::async_trait]
 impl Request for Echo {
-    fn handle(&self) -> Result<Box<dyn erased_serde::Serialize + Send + Sync>> {
+    async fn handle(&self) -> Result<Box<dyn erased_serde::Serialize + Send + Sync>> {
         Ok(Box::new(self.message.clone()))
     }
 }
@@ -162,8 +165,9 @@ pub struct Add {
 }
 
 #[typetag::serde]
+#[async_trait::async_trait]
 impl Request for Add {
-    fn handle(&self) -> Result<Box<dyn erased_serde::Serialize + Send + Sync>> {
+    async fn handle(&self) -> Result<Box<dyn erased_serde::Serialize + Send + Sync>> {
         Ok(Box::new(self.a + self.b))
     }
 }
