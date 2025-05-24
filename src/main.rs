@@ -20,9 +20,11 @@ async fn main() -> Result<()> {
         .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
         .init();
 
-    let listener = TcpListener::bind("127.0.0.1:8443").await?;
+    let server_addr = "127.0.0.1:8443";
+
+    let listener = TcpListener::bind(server_addr).await?;
     let tls_acceptor = load_tls_config()?;
-    tracing::info!("Listening with TLS on 127.0.0.1:8443");
+    tracing::info!("Listening with TLS on {}", server_addr);
 
     loop {
         tokio::select! {
