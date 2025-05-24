@@ -52,7 +52,7 @@ async fn main() -> Result<()> {
         }
     }
 
-    tracing::info!("Shut down succesfully");
+    tracing::info!("Shut down successfully");
 
     Ok(())
 }
