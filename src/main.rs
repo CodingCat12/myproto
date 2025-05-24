@@ -100,8 +100,21 @@ where
     Ok(())
 }
 
+#[derive(Serialize, Deserialize)]
+pub struct ErrorResponse(String);
+
+#[typetag::serde]
+impl Response for ErrorResponse {}
+
 async fn handle_msg(input: &[u8]) -> Result<Box<dyn Response>> {
-    let req: Box<dyn Request> = serde_json::from_slice(input)?;
+    let req: Box<dyn Request> = match serde_json::from_slice(input) {
+        Ok(r) => r,
+        Err(e) => {
+            return Ok(Box::new(ErrorResponse(format!(
+                "Failed to parse request: {e}"
+            ))));
+        }
+    };
     req.handle().await
 }
 
