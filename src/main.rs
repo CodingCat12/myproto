@@ -48,7 +48,7 @@ fn load_tls_config() -> anyhow::Result<TlsAcceptor> {
     let certs: Vec<_> =
         CertificateDer::pem_file_iter("cert.pem")?.collect::<Result<Vec<_>, _>>()?;
 
-    let private_key = PrivateKeyDer::from_pem_file("key.pem").unwrap();
+    let private_key = PrivateKeyDer::from_pem_file("key.pem")?;
 
     let config = rustls::ServerConfig::builder()
         .with_no_client_auth()
