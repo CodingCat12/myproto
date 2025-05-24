@@ -97,7 +97,7 @@ where
     Ok(())
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct ErrorResponse(String);
 
 #[typetag::serde]
@@ -119,17 +119,17 @@ use serde::{Deserialize, Serialize};
 
 #[typetag::serde(tag = "type")]
 #[async_trait::async_trait]
-pub trait Request: Send + Sync {
+pub trait Request: Send + Sync + std::fmt::Debug {
     async fn handle(&self) -> Result<Box<dyn Response>>;
 }
 
 #[typetag::serde(tag = "type")]
-pub trait Response: Send + Sync {}
+pub trait Response: Send + Sync + std::fmt::Debug {}
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct Ping;
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct PingResponse(String);
 
 #[typetag::serde]
@@ -145,12 +145,12 @@ impl Request for Ping {
     }
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct Echo {
     pub message: String,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct EchoResponse(String);
 
 #[typetag::serde]
@@ -164,13 +164,13 @@ impl Request for Echo {
     }
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct Add {
     pub a: i32,
     pub b: i32,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct AddResponse {
     sum: i32,
 }
