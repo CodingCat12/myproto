@@ -8,10 +8,9 @@ use futures::{SinkExt, StreamExt};
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio_rustls::TlsAcceptor;
 
-use tokio_util::codec::AnyDelimiterCodec;
-use tokio_util::codec::Framed;
-
 use tokio::signal;
+
+use tokio_util::codec::{Framed, LengthDelimitedCodec};
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -77,9 +76,7 @@ async fn handle_client<S>(stream: S) -> Result<()>
 where
     S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
 {
-    let delim = "\0";
-    let codec = AnyDelimiterCodec::new_with_max_length(delim.into(), delim.into(), 16 * 1024);
-    let mut framed = Framed::new(stream, codec);
+    let mut framed = Framed::new(stream, LengthDelimitedCodec::new());
 
     while let Some(line) = framed.next().await {
         let bytes = line?;
@@ -90,9 +87,9 @@ where
         tracing::debug!("Processing message");
 
         let resp = handle_msg(&bytes).await?;
+        let resp_bytes = bincode::serialize(&resp)?;
 
-        let resp_str = serde_json::to_string(&resp)?;
-        framed.send(resp_str + delim).await?;
+        framed.send(resp_bytes.into()).await?;
     }
 
     tracing::info!("Client disconnected");
@@ -107,7 +104,7 @@ pub struct ErrorResponse(String);
 impl Response for ErrorResponse {}
 
 async fn handle_msg(input: &[u8]) -> Result<Box<dyn Response>> {
-    let req: Box<dyn Request> = match serde_json::from_slice(input) {
+    let req: Box<dyn Request> = match bincode::deserialize(input) {
         Ok(r) => r,
         Err(e) => {
             return Ok(Box::new(ErrorResponse(format!(
