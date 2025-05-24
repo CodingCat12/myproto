@@ -1,8 +1,13 @@
 use anyhow::{Error, Result};
+use rustls::pki_types::CertificateDer;
+use rustls::pki_types::PrivateKeyDer;
+use rustls::pki_types::pem::PemObject;
 use serde::ser::SerializeMap;
-use tokio::net::{TcpListener, TcpStream};
+use tokio::net::TcpListener;
 
 use futures::{SinkExt, StreamExt};
+use tokio::io::{AsyncRead, AsyncWrite};
+use tokio_rustls::TlsAcceptor;
 use tokio_util::codec::Framed;
 use tokio_util::codec::LinesCodec;
 
@@ -12,21 +17,52 @@ async fn main() -> Result<()> {
         .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
         .init();
 
-    let listener = TcpListener::bind("127.0.0.1:8080").await?;
-    tracing::info!("Listening on 127.0.0.1:8080");
+    let listener = TcpListener::bind("127.0.0.1:8443").await?;
+    let tls_acceptor = load_tls_config()?;
+    tracing::info!("Listening with TLS on 127.0.0.1:8443");
 
     loop {
         let (stream, addr) = listener.accept().await?;
+        let acceptor = tls_acceptor.clone();
+
         tracing::info!(%addr, "Client connected");
+
         tokio::spawn(async move {
-            if let Err(e) = handle_client(stream).await {
-                tracing::error!(%addr, error = %e, "Error handling client");
+            match acceptor.accept(stream).await {
+                Ok(tls_stream) => {
+                    if let Err(e) = handle_client(tls_stream).await {
+                        tracing::error!(%addr, error = %e, "Error handling client");
+                    }
+                }
+                Err(e) => {
+                    tracing::error!(%addr, error = %e, "TLS handshake failed");
+                }
             }
         });
     }
 }
 
-async fn handle_client(stream: TcpStream) -> Result<()> {
+use std::sync::Arc;
+
+fn load_tls_config() -> anyhow::Result<TlsAcceptor> {
+    let certs = CertificateDer::pem_file_iter("cert.pem")
+        .unwrap()
+        .map(|cert| cert.unwrap())
+        .collect();
+
+    let private_key = PrivateKeyDer::from_pem_file("key.pem").unwrap();
+
+    let config = rustls::ServerConfig::builder()
+        .with_no_client_auth()
+        .with_single_cert(certs, private_key)?;
+
+    Ok(TlsAcceptor::from(Arc::new(config)))
+}
+
+async fn handle_client<S>(stream: S) -> Result<()>
+where
+    S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+{
     let mut framed = Framed::new(stream, LinesCodec::new());
 
     while let Some(line) = framed.next().await {

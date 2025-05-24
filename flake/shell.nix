@@ -10,6 +10,7 @@
       mkShell rec {
         nativeBuildInputs = [
           pkg-config
+          openssl
           (toolchain.withComponents [
             "rustc"
             "rust-std"
