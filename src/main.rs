@@ -77,7 +77,7 @@ where
     S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
 {
     let delim = "\0";
-    let codec = AnyDelimiterCodec::new(delim.into(), delim.into());
+    let codec = AnyDelimiterCodec::new_with_max_length(delim.into(), delim.into(), 16 * 1024);
     let mut framed = Framed::new(stream, codec);
 
     while let Some(line) = framed.next().await {
