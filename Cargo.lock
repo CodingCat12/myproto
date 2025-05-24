@@ -481,7 +481,6 @@ dependencies = [
  "async-trait",
  "bincode",
  "bytes",
- "erased-serde",
  "futures",
  "nom 8.0.0",
  "rustls",
