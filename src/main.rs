@@ -8,8 +8,9 @@ use tokio::net::TcpListener;
 use futures::{SinkExt, StreamExt};
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio_rustls::TlsAcceptor;
+
+use tokio_util::codec::AnyDelimiterCodec;
 use tokio_util::codec::Framed;
-use tokio_util::codec::LinesCodec;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -61,23 +62,28 @@ async fn handle_client<S>(stream: S) -> Result<()>
 where
     S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
 {
-    let mut framed = Framed::new(stream, LinesCodec::new());
+    let delim = "\0";
+    let codec = AnyDelimiterCodec::new(delim.into(), delim.into());
+    let mut framed = Framed::new(stream, codec);
 
     while let Some(line) = framed.next().await {
-        let line = line?;
+        let bytes = line?;
+        let line = String::from_utf8_lossy(&bytes);
         let span = tracing::info_span!("handle_message", message = %line);
         let _enter = span.enter();
 
         tracing::debug!("Processing message");
 
-        let resp = match handle_msg(line.as_bytes()).await {
+        let resp = match handle_msg(&bytes).await {
             Ok(s) => Response::Success(s),
             Err(err) => Response::Error(err),
         };
 
         let resp_str = serde_json::to_string_pretty(&resp)?;
-        framed.send(resp_str).await?;
+        framed.send(resp_str + delim).await?;
     }
+
+    tracing::info!("Client disconnected");
 
     Ok(())
 }
