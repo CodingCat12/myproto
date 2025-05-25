@@ -1,12 +1,8 @@
 use anyhow::Result;
-use rustls::pki_types::CertificateDer;
-use rustls::pki_types::PrivateKeyDer;
-use rustls::pki_types::pem::PemObject;
 use tokio::net::TcpListener;
 
 use futures::{SinkExt, StreamExt};
 use tokio::io::{AsyncRead, AsyncWrite};
-use tokio_rustls::TlsAcceptor;
 
 use tokio::signal;
 
@@ -21,26 +17,16 @@ async fn main() -> Result<()> {
     let server_addr = "127.0.0.1:8443";
 
     let listener = TcpListener::bind(server_addr).await?;
-    let tls_acceptor = load_tls_config()?;
-    tracing::info!("Listening with TLS on {}", server_addr);
+    tracing::info!("Listening on {}", server_addr);
 
     loop {
         tokio::select! {
             Ok((stream, addr)) = listener.accept() => {
-                let acceptor = tls_acceptor.clone();
-
                 tracing::info!(%addr, "Client connected");
 
                 tokio::spawn(async move {
-                    match acceptor.accept(stream).await {
-                        Ok(tls_stream) => {
-                            if let Err(e) = handle_client(tls_stream, addr).await {
-                                tracing::error!(%addr, error = %e, "Error handling client");
-                            }
-                        }
-                        Err(e) => {
-                            tracing::error!(%addr, error = %e, "TLS handshake failed");
-                        }
+                    if let Err(e) = handle_client(stream, addr).await {
+                        tracing::error!(%addr, error = %e, "Error handling client");
                     }
                 });
             }
@@ -55,21 +41,6 @@ async fn main() -> Result<()> {
     tracing::info!("Shut down successfully");
 
     Ok(())
-}
-
-use std::sync::Arc;
-
-fn load_tls_config() -> anyhow::Result<TlsAcceptor> {
-    let certs: Vec<_> =
-        CertificateDer::pem_file_iter("cert.pem")?.collect::<Result<Vec<_>, _>>()?;
-
-    let private_key = PrivateKeyDer::from_pem_file("key.pem")?;
-
-    let config = rustls::ServerConfig::builder()
-        .with_no_client_auth()
-        .with_single_cert(certs, private_key)?;
-
-    Ok(TlsAcceptor::from(Arc::new(config)))
 }
 
 async fn handle_client<S>(stream: S, peer_addr: std::net::SocketAddr) -> Result<()>
