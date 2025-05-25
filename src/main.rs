@@ -121,13 +121,13 @@ async fn handle_msg(input: &[u8]) -> Result<Box<dyn Response>> {
 
 use serde::{Deserialize, Serialize};
 
-#[typetag::serde(tag = "type")]
+#[typetag::serde]
 #[async_trait::async_trait]
 pub trait Request: Send + Sync + std::fmt::Debug {
     async fn handle(&self) -> Result<Box<dyn Response>>;
 }
 
-#[typetag::serde(tag = "type")]
+#[typetag::serde]
 pub trait Response: Send + Sync + std::fmt::Debug {}
 
 #[derive(Serialize, Deserialize, Debug)]
