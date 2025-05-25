@@ -34,7 +34,7 @@ async fn main() -> Result<()> {
                 tokio::spawn(async move {
                     match acceptor.accept(stream).await {
                         Ok(tls_stream) => {
-                            if let Err(e) = handle_client(tls_stream).await {
+                            if let Err(e) = handle_client(tls_stream, addr).await {
                                 tracing::error!(%addr, error = %e, "Error handling client");
                             }
                         }
@@ -72,17 +72,21 @@ fn load_tls_config() -> anyhow::Result<TlsAcceptor> {
     Ok(TlsAcceptor::from(Arc::new(config)))
 }
 
-async fn handle_client<S>(stream: S) -> Result<()>
+async fn handle_client<S>(stream: S, peer_addr: std::net::SocketAddr) -> Result<()>
 where
     S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
 {
+    let span = tracing::info_span!("client_session", %peer_addr);
+    let _enter = span.enter();
+
     let mut framed = Framed::new(stream, LengthDelimitedCodec::new());
 
     while let Some(line) = framed.next().await {
         let bytes = line?;
         let line = String::from_utf8_lossy(&bytes);
-        let span = tracing::info_span!("handle_message", message = %line);
-        let _enter = span.enter();
+
+        let msg_span = tracing::info_span!("handle_message", message = %line);
+        let _enter_msg = msg_span.enter();
 
         tracing::debug!("Processing message");
 
