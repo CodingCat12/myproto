@@ -1,6 +1,6 @@
 use anyhow::Result;
 
-use futures::{SinkExt, StreamExt};
+use futures::{SinkExt, StreamExt, future::join_all};
 use tokio::io::{AsyncRead, AsyncWrite};
 
 use tokio_util::codec::{Framed, LengthDelimitedCodec};
@@ -23,7 +23,7 @@ where
 
         tracing::debug!("Processing message");
 
-        let resp = handle_msg(&bytes).await?;
+        let resp = handle_msg(&bytes).await;
         let resp_bytes = bincode::serialize(&resp)?;
 
         framed.send(resp_bytes.into()).await?;
@@ -40,16 +40,22 @@ pub struct ErrorResponse(String);
 #[typetag::serde]
 impl Response for ErrorResponse {}
 
-async fn handle_msg(input: &[u8]) -> Result<Box<dyn Response>> {
-    let req: Box<dyn Request> = match bincode::deserialize(input) {
+async fn handle_msg(input: &[u8]) -> Vec<Box<dyn Response>> {
+    let requests: Vec<Box<dyn Request>> = match bincode::deserialize(input) {
         Ok(r) => r,
         Err(e) => {
-            return Ok(Box::new(ErrorResponse(format!(
+            return vec![Box::new(ErrorResponse(format!(
                 "Failed to parse request: {e}"
-            ))));
+            )))];
         }
     };
-    req.handle().await
+
+    let futures = requests.into_iter().map(|req| async move {
+        req.handle()
+            .await
+            .unwrap_or_else(|e| Box::new(ErrorResponse(format!("Failed to handle request: {e}"))))
+    });
+    join_all(futures).await
 }
 
 use serde::{Deserialize, Serialize};
